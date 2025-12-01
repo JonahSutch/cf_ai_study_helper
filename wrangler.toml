@@ -1,0 +1,22 @@
+name = "cf-ai-study-helper"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Workers AI binding
+[ai]
+binding = "AI"
+
+# Durable Objects binding for conversation state
+[[durable_objects.bindings]]
+name = "CHAT_STORAGE"
+class_name = "ChatStorage"
+script_name = "cf-ai-study-helper"
+
+# Durable Objects migration (required for free plan)
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatStorage"]
+
+# Environment variables (optional)
+[vars]
+ENVIRONMENT = "development"
