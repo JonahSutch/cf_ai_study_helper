@@ -1,13 +1,18 @@
-# AI Chat Application - Cloudflare Workers
+# AI Study Helper - Cloudflare Workers
 
-A serverless AI chat application built with Cloudflare Workers, Workers AI (Llama 3.3), and Durable Objects for persistent conversation memory.
+An intelligent study companion built with Cloudflare Workers, Workers AI (Llama 3.3), and Durable Objects for personalized test preparation.
 
 ## Features
 
 - **Serverless Architecture**: Runs entirely on Cloudflare Workers
-- **AI-Powered**: Uses Llama 3.3 70B via Workers AI
-- **Persistent Memory**: Durable Objects store conversation history
-- **Beautiful UI**: Clean, responsive chat interface
+- **AI-Powered**: Uses Llama 3.3 70B via Workers AI for intelligent content generation
+- **Multiple Study Modes**:
+  - 📚 **Flashcards**: Generate AI-powered flashcards for any subject
+  - 🎯 **Multiple Choice Quiz**: Practice with questions that include hint dropdowns
+  - ✅ **Graded Test**: Take comprehensive tests with AI grading and feedback
+- **Class Validation**: AI verifies if your subject is valid before generating content
+- **Persistent Sessions**: Durable Objects store your study progress
+- **Beautiful UI**: Clean, responsive interface optimized for studying
 - **Fast & Scalable**: Global edge network deployment
 
 ## Project Structure
@@ -60,15 +65,44 @@ A serverless AI chat application built with Cloudflare Workers, Workers AI (Llam
 
 ## API Endpoints
 
-- `GET /` - Chat interface
-- `POST /api/chat` - Send a message
+- `GET /` - Study helper interface
+- `POST /api/validate-class` - Validate if a class/subject is valid
   ```json
   {
-    "message": "Hello!",
+    "className": "Biology 101"
+  }
+  ```
+- `POST /api/generate-flashcards` - Generate flashcards for a subject
+  ```json
+  {
+    "className": "Biology 101",
+    "topic": "Cell Structure",
     "sessionId": "optional-session-id"
   }
   ```
-- `GET /api/history?sessionId=xxx` - Get conversation history
+- `POST /api/generate-quiz` - Generate multiple choice quiz
+  ```json
+  {
+    "className": "Biology 101",
+    "topic": "Cell Structure",
+    "sessionId": "optional-session-id"
+  }
+  ```
+- `POST /api/generate-test` - Generate a graded test
+  ```json
+  {
+    "className": "Biology 101",
+    "topic": "Cell Structure",
+    "sessionId": "optional-session-id"
+  }
+  ```
+- `POST /api/grade-test` - Submit test for AI grading
+  ```json
+  {
+    "answers": ["answer1", "answer2"],
+    "sessionId": "session-id"
+  }
+  ```
 
 ## Configuration
 
@@ -77,15 +111,23 @@ Edit [wrangler.toml](wrangler.toml) to customize:
 - AI model
 - Durable Objects settings
 
-## Development Timeline
+## Study Modes
 
-This project was built following an accelerated timeline:
-- **Day 1**: Setup & Core Structure (3-4 hours)
-- **Day 2**: LLM Integration & Basic Chat (4-5 hours)
-- **Day 3**: Memory & State (3-4 hours)
-- **Day 4**: Workflows + Polish + Deploy (4-5 hours)
+### 1. Flashcards 📚
+Generate interactive flashcards on any topic. Click to flip between question and answer sides.
 
-Total: 15-18 hours over 3-4 days
+### 2. Multiple Choice Quiz 🎯
+Practice with AI-generated multiple choice questions. Each question includes:
+- 4 answer options
+- Expandable hint dropdown for guidance
+- Instant feedback on your answers
+
+### 3. Graded Test ✅
+Take a comprehensive test that the AI will grade:
+- Multiple questions covering the topic
+- Submit all answers at once
+- Receive detailed feedback and scoring
+- Review correct answers and explanations
 
 ## Technologies
 
