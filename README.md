@@ -22,10 +22,25 @@ An intelligent study companion built with Cloudflare Workers, Workers AI (Llama 
 ```
 .
 ├── src/
-│   ├── index.js          # Main Worker entry point
-│   └── chatStorage.js    # Durable Object for conversation storage
-├── wrangler.toml         # Cloudflare Workers configuration
-└── package.json          # Project dependencies
+│   ├── index.js                        # Main Worker entry point & routing
+│   ├── chatStorage.js                  # Durable Object for session storage
+│   ├── handlers/                       # API endpoint handlers
+│   │   ├── validate-class.js           # Class validation endpoint
+│   │   ├── generate-flashcards.js      # Flashcard generation endpoint
+│   │   ├── generate-quiz.js            # Quiz generation endpoint
+│   │   ├── generate-test.js            # Test generation endpoint
+│   │   ├── grade-test.js               # Test grading endpoint
+│   │   └── get-session.js              # Session retrieval endpoint
+│   ├── services/                       # Business logic services
+│   │   ├── ai-service.js               # Workers AI integration
+│   │   └── storage-service.js          # Durable Objects integration
+│   └── utils/                          # Utility functions
+│       ├── constants.js                # Configuration constants
+│       ├── validators.js               # Input validation
+│       ├── response-helpers.js         # HTTP response helpers
+│       └── json-parser.js              # AI response parsing
+├── wrangler.toml                       # Cloudflare Workers configuration
+└── package.json                        # Project dependencies
 ```
 
 ## Prerequisites
@@ -59,11 +74,12 @@ An intelligent study companion built with Cloudflare Workers, Workers AI (Llama 
 
 ## How It Works
 
-1. **User Interface**: Simple HTML/CSS/JS chat interface served directly from the Worker
-2. **API Endpoint**: `/api/chat` accepts POST requests with user messages
-3. **Durable Objects**: Each chat session gets a unique Durable Object instance to store conversation history
-4. **Workers AI**: Calls Llama 3.3 70B model with full conversation context
-5. **Persistent Memory**: Conversations are maintained across page refreshes
+1. **User Interface**: Clean HTML/CSS/JS study interface served directly from the Worker
+2. **API Endpoints**: Modular handlers process requests for validation, content generation, and grading
+3. **AI Service**: Centralized service layer handles all Workers AI interactions with Llama 3.3 70B
+4. **Storage Service**: Abstraction layer for Durable Objects manages session state and study content
+5. **Durable Objects**: Each study session gets a unique Durable Object instance to persist progress
+6. **Persistent Sessions**: Study progress, generated content, and quiz results are maintained across page refreshes
 
 ## API Endpoints
 

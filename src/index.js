@@ -6,472 +6,75 @@
 // Import the Durable Object
 export { ChatStorage } from './chatStorage.js';
 
+// Import API handlers
+import { handleValidateClass } from './handlers/validate-class.js';
+import { handleGenerateFlashcards } from './handlers/generate-flashcards.js';
+import { handleGenerateQuiz } from './handlers/generate-quiz.js';
+import { handleGenerateTest } from './handlers/generate-test.js';
+import { handleGradeTest } from './handlers/grade-test.js';
+import { handleGetSession } from './handlers/get-session.js';
+
+// Import constants
+import { CORS_HEADERS } from './utils/constants.js';
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // CORS headers for all responses
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    };
-
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, { headers: CORS_HEADERS });
     }
 
     try {
       // Serve frontend
       if (url.pathname === '/' || url.pathname === '/index.html') {
         return new Response(HTML_CONTENT, {
-          headers: { 'Content-Type': 'text/html', ...corsHeaders },
+          headers: { 'Content-Type': 'text/html', ...CORS_HEADERS },
         });
       }
 
       // API endpoint to validate class
       if (url.pathname === '/api/validate-class' && request.method === 'POST') {
-        return handleValidateClass(request, env, corsHeaders);
+        return handleValidateClass(request, env, CORS_HEADERS);
       }
 
       // API endpoint to generate flashcards
       if (url.pathname === '/api/generate-flashcards' && request.method === 'POST') {
-        return handleGenerateFlashcards(request, env, corsHeaders);
+        return handleGenerateFlashcards(request, env, CORS_HEADERS);
       }
 
       // API endpoint to generate quiz
       if (url.pathname === '/api/generate-quiz' && request.method === 'POST') {
-        return handleGenerateQuiz(request, env, corsHeaders);
+        return handleGenerateQuiz(request, env, CORS_HEADERS);
       }
 
       // API endpoint to generate test
       if (url.pathname === '/api/generate-test' && request.method === 'POST') {
-        return handleGenerateTest(request, env, corsHeaders);
+        return handleGenerateTest(request, env, CORS_HEADERS);
       }
 
       // API endpoint to grade test
       if (url.pathname === '/api/grade-test' && request.method === 'POST') {
-        return handleGradeTest(request, env, corsHeaders);
+        return handleGradeTest(request, env, CORS_HEADERS);
       }
 
       // API endpoint to get session data
       if (url.pathname === '/api/session' && request.method === 'GET') {
-        return handleGetSession(request, env, corsHeaders);
+        return handleGetSession(request, env, CORS_HEADERS);
       }
 
       // 404 for other routes
-      return new Response('Not Found', { status: 404, headers: corsHeaders });
+      return new Response('Not Found', { status: 404, headers: CORS_HEADERS });
     } catch (error) {
       console.error('Error:', error);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
   },
 };
-
-/**
- * Validate if a class/subject is valid
- */
-async function handleValidateClass(request, env, corsHeaders) {
-  const { className } = await request.json();
-
-  if (!className) {
-    return new Response(JSON.stringify({ error: 'Class name is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  const messages = [
-    {
-      role: 'system',
-      content: 'You are a helpful educational assistant. Your task is to determine if the given text represents a valid academic subject, class, or topic that someone could study. Respond with ONLY "VALID" if it is a real academic subject, or "INVALID: [brief reason]" if it is not.',
-    },
-    {
-      role: 'user',
-      content: `Is "${className}" a valid academic subject or class? Respond with ONLY "VALID" or "INVALID: [reason]"`,
-    },
-  ];
-
-  const response = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-    messages,
-    max_tokens: 50,
-    temperature: 0.3,
-  });
-
-  const result = response.response.trim();
-  const isValid = result.toUpperCase().startsWith('VALID');
-
-  return new Response(
-    JSON.stringify({
-      valid: isValid,
-      message: isValid ? 'Valid class!' : result,
-    }),
-    {
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    }
-  );
-}
-
-/**
- * Generate flashcards for a subject
- */
-async function handleGenerateFlashcards(request, env, corsHeaders) {
-  const { className, topic, sessionId = 'default', count = 10 } = await request.json();
-
-  if (!className) {
-    return new Response(JSON.stringify({ error: 'Class name is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  const messages = [
-    {
-      role: 'system',
-      content: 'You are an expert educational content creator. Generate high-quality flashcards for studying. Return ONLY valid JSON in this exact format: {"flashcards": [{"question": "...", "answer": "..."}]}',
-    },
-    {
-      role: 'user',
-      content: `Create ${count} flashcards for ${className}${topic ? ` focusing on ${topic}` : ''}. Each flashcard should have a clear question and a concise answer. Return ONLY the JSON format specified.`,
-    },
-  ];
-
-  const response = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-    messages,
-    max_tokens: 2000,
-    temperature: 0.7,
-  });
-
-  // Parse JSON from response
-  let flashcards;
-  try {
-    const responseData = response.response;
-
-    // Check if response is already an object
-    if (typeof responseData === 'object' && responseData !== null) {
-      flashcards = responseData;
-    } else if (typeof responseData === 'string') {
-      // If it's a string, try to parse JSON from it
-      const responseText = responseData.trim();
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        flashcards = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } else {
-      throw new Error('Unexpected response format');
-    }
-
-    // Validate the structure
-    if (!flashcards.flashcards || !Array.isArray(flashcards.flashcards)) {
-      throw new Error('Invalid flashcard structure');
-    }
-  } catch (error) {
-    console.error('JSON Parse Error:', error.message, 'Response:', response.response);
-    return new Response(JSON.stringify({
-      error: 'Failed to generate flashcards. Please try again.',
-      details: error.message
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  // Store in Durable Object
-  const id = env.CHAT_STORAGE.idFromName(sessionId);
-  const stub = env.CHAT_STORAGE.get(id);
-  await stub.fetch('http://internal/session', {
-    method: 'POST',
-    body: JSON.stringify({ className, mode: 'flashcards', topic }),
-  });
-  await stub.fetch('http://internal/content', {
-    method: 'POST',
-    body: JSON.stringify(flashcards),
-  });
-
-  return new Response(JSON.stringify(flashcards), {
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
-  });
-}
-
-/**
- * Generate multiple choice quiz
- */
-async function handleGenerateQuiz(request, env, corsHeaders) {
-  const { className, topic, sessionId = 'default', count = 5 } = await request.json();
-
-  if (!className) {
-    return new Response(JSON.stringify({ error: 'Class name is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  const messages = [
-    {
-      role: 'system',
-      content: 'You are an expert quiz creator. Generate multiple choice questions with hints. Return ONLY valid JSON in this exact format: {"questions": [{"question": "...", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "correct": 0, "hint": "...", "explanation": "..."}]}. The "correct" field should be the index (0-3) of the correct answer.',
-    },
-    {
-      role: 'user',
-      content: `Create ${count} multiple choice questions for ${className}${topic ? ` focusing on ${topic}` : ''}. Each question should have 4 options (A-D), indicate which is correct, include a helpful hint, and provide an explanation. Return ONLY the JSON format specified.`,
-    },
-  ];
-
-  const response = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-    messages,
-    max_tokens: 2500,
-    temperature: 0.7,
-  });
-
-  // Parse JSON from response
-  let quiz;
-  try {
-    const responseData = response.response;
-
-    // Check if response is already an object
-    if (typeof responseData === 'object' && responseData !== null) {
-      quiz = responseData;
-    } else if (typeof responseData === 'string') {
-      const responseText = responseData.trim();
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        quiz = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } else {
-      throw new Error('Unexpected response format');
-    }
-
-    if (!quiz.questions || !Array.isArray(quiz.questions)) {
-      throw new Error('Invalid quiz structure');
-    }
-  } catch (error) {
-    console.error('JSON Parse Error:', error.message, 'Response:', response.response);
-    return new Response(JSON.stringify({
-      error: 'Failed to generate quiz. Please try again.',
-      details: error.message
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  // Store in Durable Object
-  const id = env.CHAT_STORAGE.idFromName(sessionId);
-  const stub = env.CHAT_STORAGE.get(id);
-  await stub.fetch('http://internal/session', {
-    method: 'POST',
-    body: JSON.stringify({ className, mode: 'quiz', topic }),
-  });
-  await stub.fetch('http://internal/content', {
-    method: 'POST',
-    body: JSON.stringify(quiz),
-  });
-
-  return new Response(JSON.stringify(quiz), {
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
-  });
-}
-
-/**
- * Generate graded test
- */
-async function handleGenerateTest(request, env, corsHeaders) {
-  const { className, topic, sessionId = 'default', count = 10 } = await request.json();
-
-  if (!className) {
-    return new Response(JSON.stringify({ error: 'Class name is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  const messages = [
-    {
-      role: 'system',
-      content: 'You are an expert test creator. Generate comprehensive test questions. Return ONLY valid JSON in this exact format: {"questions": [{"question": "...", "type": "short_answer", "correctAnswer": "...", "points": 10}]}. Mix of question types allowed: "multiple_choice" (with "options" array) or "short_answer".',
-    },
-    {
-      role: 'user',
-      content: `Create ${count} test questions for ${className}${topic ? ` focusing on ${topic}` : ''}. Include a mix of multiple choice and short answer questions. Each question should have a point value and correct answer. Return ONLY the JSON format specified.`,
-    },
-  ];
-
-  const response = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-    messages,
-    max_tokens: 3000,
-    temperature: 0.7,
-  });
-
-  // Parse JSON from response
-  let test;
-  try {
-    const responseData = response.response;
-
-    // Check if response is already an object
-    if (typeof responseData === 'object' && responseData !== null) {
-      test = responseData;
-    } else if (typeof responseData === 'string') {
-      const responseText = responseData.trim();
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        test = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } else {
-      throw new Error('Unexpected response format');
-    }
-
-    if (!test.questions || !Array.isArray(test.questions)) {
-      throw new Error('Invalid test structure');
-    }
-  } catch (error) {
-    console.error('JSON Parse Error:', error.message, 'Response:', response.response);
-    return new Response(JSON.stringify({
-      error: 'Failed to generate test. Please try again.',
-      details: error.message
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  // Store in Durable Object
-  const id = env.CHAT_STORAGE.idFromName(sessionId);
-  const stub = env.CHAT_STORAGE.get(id);
-  await stub.fetch('http://internal/session', {
-    method: 'POST',
-    body: JSON.stringify({ className, mode: 'test', topic }),
-  });
-  await stub.fetch('http://internal/content', {
-    method: 'POST',
-    body: JSON.stringify(test),
-  });
-
-  return new Response(JSON.stringify(test), {
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
-  });
-}
-
-/**
- * Grade a submitted test
- */
-async function handleGradeTest(request, env, corsHeaders) {
-  const { answers, sessionId = 'default' } = await request.json();
-
-  if (!answers || !Array.isArray(answers)) {
-    return new Response(JSON.stringify({ error: 'Answers array is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  // Get test content from Durable Object
-  const id = env.CHAT_STORAGE.idFromName(sessionId);
-  const stub = env.CHAT_STORAGE.get(id);
-  const content = await stub.fetch('http://internal/content').then(r => r.json());
-
-  if (!content || !content.questions) {
-    return new Response(JSON.stringify({ error: 'No test found for this session' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  // Build grading prompt
-  const questionsAndAnswers = content.questions.map((q, i) => ({
-    question: q.question,
-    correctAnswer: q.correctAnswer,
-    studentAnswer: answers[i],
-    points: q.points || 10,
-  }));
-
-  const messages = [
-    {
-      role: 'system',
-      content: 'You are an expert grader. Grade each answer and provide feedback. Return ONLY valid JSON in this format: {"results": [{"questionIndex": 0, "pointsEarned": 10, "pointsPossible": 10, "feedback": "..."}], "totalScore": 100, "totalPossible": 100}',
-    },
-    {
-      role: 'user',
-      content: `Grade these test answers:\n\n${JSON.stringify(questionsAndAnswers, null, 2)}\n\nProvide fair grading with constructive feedback. Return ONLY the JSON format specified.`,
-    },
-  ];
-
-  const response = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
-    messages,
-    max_tokens: 2000,
-    temperature: 0.3,
-  });
-
-  // Parse JSON from response
-  let grading;
-  try {
-    const responseData = response.response;
-
-    // Check if response is already an object
-    if (typeof responseData === 'object' && responseData !== null) {
-      grading = responseData;
-    } else if (typeof responseData === 'string') {
-      const responseText = responseData.trim();
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        grading = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } else {
-      throw new Error('Unexpected response format');
-    }
-
-    if (!grading.results || !Array.isArray(grading.results)) {
-      throw new Error('Invalid grading structure');
-    }
-  } catch (error) {
-    console.error('JSON Parse Error:', error.message, 'Response:', response.response);
-    return new Response(JSON.stringify({
-      error: 'Failed to grade test. Please try again.',
-      details: error.message
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-  }
-
-  // Store grading results
-  await stub.fetch('http://internal/progress', {
-    method: 'POST',
-    body: JSON.stringify(grading),
-  });
-
-  return new Response(JSON.stringify(grading), {
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
-  });
-}
-
-/**
- * Get session data
- */
-async function handleGetSession(request, env, corsHeaders) {
-  const url = new URL(request.url);
-  const sessionId = url.searchParams.get('sessionId') || 'default';
-
-  const id = env.CHAT_STORAGE.idFromName(sessionId);
-  const stub = env.CHAT_STORAGE.get(id);
-
-  const session = await stub.fetch('http://internal/session').then(r => r.json());
-
-  return new Response(JSON.stringify(session), {
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
-  });
-}
 
 // Inline HTML for the study helper interface
 const HTML_CONTENT = `
