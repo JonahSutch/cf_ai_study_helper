@@ -12,6 +12,7 @@ export const TOKEN_LIMITS = {
   GENERATE_QUIZ: 2500,
   GENERATE_TEST: 3000,
   GRADE_TEST: 2000,
+  EXTRACT_TOPIC: 30,
 };
 
 // Temperature Settings
@@ -26,6 +27,16 @@ export const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+// File Upload Limits
+export const FILE_LIMITS = {
+  MAX_SIZE_BYTES: 25600,       // 25KB
+  MAX_CONTEXT_CHARS: 16000,    // ~4k tokens at 4 chars/token
+  ALLOWED_EXTENSIONS: ['txt', 'md', 'csv', 'js', 'py', 'html', 'json', 'xml', 'pdf'],
+};
+
+// Topic Input Limits
+export const TOPIC_MAX_CHARS = 500;
 
 // Default Values
 export const DEFAULTS = {

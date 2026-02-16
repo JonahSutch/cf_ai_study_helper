@@ -13,6 +13,7 @@ import { handleGenerateQuiz } from './handlers/generate-quiz.js';
 import { handleGenerateTest } from './handlers/generate-test.js';
 import { handleGradeTest } from './handlers/grade-test.js';
 import { handleGetSession } from './handlers/get-session.js';
+import { handleExtractTopic } from './handlers/extract-topic.js';
 
 // Import constants
 import { CORS_HEADERS } from './utils/constants.js';
@@ -52,6 +53,11 @@ export default {
       // API endpoint to generate test
       if (url.pathname === '/api/generate-test' && request.method === 'POST') {
         return handleGenerateTest(request, env, CORS_HEADERS);
+      }
+
+      // API endpoint to extract topic from file content
+      if (url.pathname === '/api/extract-topic' && request.method === 'POST') {
+        return handleExtractTopic(request, env, CORS_HEADERS);
       }
 
       // API endpoint to grade test
@@ -517,19 +523,19 @@ const HTML_CONTENT = `
 
     input[type="file"] {
       width: 100%;
-      padding: 12px 16px;
-      border: 2px dashed var(--border-color);
+      padding: 10px 14px;
+      border: 1px dashed var(--border-color);
       border-radius: 8px;
-      font-size: 14px;
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      transition: border-color 0.2s;
+      font-size: 13px;
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      transition: border-color 0.2s, background 0.2s;
       cursor: pointer;
     }
 
     input[type="file"]:hover {
       border-color: var(--accent-primary);
-      background: var(--bg-tertiary);
+      background: var(--bg-secondary);
     }
 
     .file-item {
@@ -560,6 +566,64 @@ const HTML_CONTENT = `
 
     .file-remove-btn:hover {
       color: var(--text-primary);
+    }
+
+    .file-upload-section {
+      margin-top: 8px;
+    }
+
+    .file-upload-or {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin: 6px 0;
+      position: relative;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .file-upload-or::before,
+    .file-upload-or::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 38%;
+      height: 1px;
+      background: var(--border-color);
+    }
+
+    .file-upload-or::before { left: 0; }
+    .file-upload-or::after { right: 0; }
+
+    .file-status {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .file-status.visible {
+      display: flex;
+    }
+
+    .topic-char-count {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    .topic-char-count.near-limit {
+      color: var(--warning);
+    }
+
+    .topic-char-count.at-limit {
+      color: var(--error);
     }
 
     .btn {
@@ -989,7 +1053,7 @@ const HTML_CONTENT = `
     <div class="navbar">
       <div class="navbar-left">
         <div class="navbar-title">
-          <span>🎓</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
           <span>AI Study Helper</span>
         </div>
       </div>
@@ -999,7 +1063,7 @@ const HTML_CONTENT = `
           <span>New Study Session</span>
         </button>
         <div class="theme-toggle" onclick="toggleTheme()" id="themeToggle">
-          🌙
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </div>
       </div>
     </div>
@@ -1028,7 +1092,16 @@ const HTML_CONTENT = `
             </div>
             <div class="form-group">
               <label for="topic">Specific Focus (Optional)</label>
-              <input type="text" id="topic" placeholder="e.g., Chapter 5, Photosynthesis, etc." />
+              <input type="text" id="topic" placeholder="e.g., Chapter 5, Photosynthesis, etc." maxlength="500" oninput="updateTopicCharCount('topic', 'topicCharCount')" />
+              <div class="topic-char-count" id="topicCharCount">0 / 500</div>
+              <div class="file-upload-section">
+                <div class="file-upload-or">or upload a file</div>
+                <input type="file" id="topicFile" accept=".txt,.md,.csv,.js,.py,.html,.json,.xml,.pdf" onchange="handleFileUpload(this, 'topic', 'topicFileStatus')" />
+                <div class="file-status" id="topicFileStatus">
+                  <span class="file-item-name" id="topicFileName"></span>
+                  <button class="file-remove-btn" onclick="clearFileUpload('topicFile', 'topicFileStatus')" title="Remove file">&#x2715;</button>
+                </div>
+              </div>
             </div>
             <button class="btn" onclick="validateClass()">Continue</button>
           </div>
@@ -1042,22 +1115,31 @@ const HTML_CONTENT = `
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label for="topicMode">Specific Focus (Optional - can be changed)</label>
-                <input type="text" id="topicMode" placeholder="Add information about the topic" />
+                <input type="text" id="topicMode" placeholder="Add information about the topic" maxlength="500" oninput="updateTopicCharCount('topicMode', 'topicModeCharCount')" />
+                <div class="topic-char-count" id="topicModeCharCount">0 / 500</div>
+                <div class="file-upload-section">
+                  <div class="file-upload-or">or upload a file</div>
+                  <input type="file" id="topicModeFile" accept=".txt,.md,.csv,.js,.py,.html,.json,.xml,.pdf" onchange="handleFileUpload(this, 'topicMode', 'topicModeFileStatus')" />
+                  <div class="file-status" id="topicModeFileStatus">
+                    <span class="file-item-name" id="topicModeFileName"></span>
+                    <button class="file-remove-btn" onclick="clearFileUpload('topicModeFile', 'topicModeFileStatus')" title="Remove file">&#x2715;</button>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="mode-grid">
               <div class="mode-card" onclick="selectMode('flashcards')">
-                <div class="mode-icon">📚</div>
+                <div class="mode-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg></div>
                 <div class="mode-title">Flashcards</div>
                 <div class="mode-desc">Generate interactive flashcards to review key concepts</div>
               </div>
               <div class="mode-card" onclick="selectMode('quiz')">
-                <div class="mode-icon">🎯</div>
+                <div class="mode-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                 <div class="mode-title">Practice Quiz</div>
                 <div class="mode-desc">Multiple choice questions with hints and explanations</div>
               </div>
               <div class="mode-card" onclick="selectMode('test')">
-                <div class="mode-icon">✅</div>
+                <div class="mode-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
                 <div class="mode-title">Graded Test</div>
                 <div class="mode-desc">Take a comprehensive test with AI grading</div>
               </div>
@@ -1092,6 +1174,8 @@ const HTML_CONTENT = `
     let sessionId = initPersistentSession();
     let currentClass = '';
     let currentTopic = '';
+    let currentFileContent = '';
+    let currentFileName = '';
     let currentMode = '';
     let currentQuantity = 10;
     let currentContent = null;
@@ -1099,6 +1183,170 @@ const HTML_CONTENT = `
     let flashcardFlipped = false;
     let quizAnswers = [];
     let testAnswers = [];
+
+    // File Upload Constants
+    const FILE_MAX_BYTES = 25600;
+    const FILE_MAX_CHARS = 16000;
+    const TOPIC_MAX_CHARS = 500;
+
+    function updateTopicCharCount(inputId, counterId) {
+      const input = document.getElementById(inputId);
+      const counter = document.getElementById(counterId);
+      if (!input || !counter) return;
+      const len = input.value.length;
+      counter.textContent = len + ' / ' + TOPIC_MAX_CHARS;
+      counter.className = 'topic-char-count';
+      if (len >= TOPIC_MAX_CHARS) {
+        counter.classList.add('at-limit');
+      } else if (len >= TOPIC_MAX_CHARS * 0.8) {
+        counter.classList.add('near-limit');
+      }
+    }
+
+    async function handleFileUpload(input, topicInputId, statusId) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const ext = file.name.split('.').pop().toLowerCase();
+      const allowed = ['txt', 'md', 'csv', 'js', 'py', 'html', 'json', 'xml', 'pdf'];
+      if (!allowed.includes(ext)) {
+        showError('Unsupported file type. Please upload a text file (.txt, .md, .pdf, etc.)');
+        input.value = '';
+        return;
+      }
+
+      if (file.size > FILE_MAX_BYTES) {
+        showError('File is too large. Maximum size is 25KB.');
+        input.value = '';
+        return;
+      }
+
+      var text;
+      if (ext === 'pdf') {
+        try {
+          text = await extractPdfText(file);
+        } catch (err) {
+          showError('Could not read PDF. It may be scanned or image-based.');
+          input.value = '';
+          return;
+        }
+      } else {
+        text = await readFileAsText(file);
+      }
+      const truncated = text.slice(0, FILE_MAX_CHARS);
+      currentFileContent = truncated;
+      currentFileName = file.name;
+
+      const statusEl = document.getElementById(statusId);
+      const nameSpan = statusEl ? statusEl.querySelector('.file-item-name') : null;
+      if (nameSpan) nameSpan.textContent = file.name;
+      if (statusEl) statusEl.classList.add('visible');
+
+      // Also sync the other step's file status
+      syncFileStatusUI();
+
+      try {
+        const topicInput = document.getElementById(topicInputId);
+        if (topicInput) {
+          topicInput.value = 'Extracting topic...';
+          topicInput.disabled = true;
+        }
+
+        const response = await fetch('/api/extract-topic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileContent: truncated })
+        });
+
+        const data = await response.json();
+        if (topicInput) {
+          topicInput.disabled = false;
+          topicInput.value = data.topic || '';
+          updateTopicCharCount(topicInputId, topicInputId === 'topic' ? 'topicCharCount' : 'topicModeCharCount');
+        }
+        currentTopic = data.topic || '';
+        saveSessionState();
+      } catch (err) {
+        const topicInput = document.getElementById(topicInputId);
+        if (topicInput) {
+          topicInput.disabled = false;
+          topicInput.value = '';
+        }
+        console.warn('Topic extraction failed:', err.message);
+      }
+    }
+
+    function readFileAsText(file) {
+      return new Promise(function(resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function(e) { resolve(e.target.result); };
+        reader.onerror = function() { reject(new Error('Failed to read file')); };
+        reader.readAsText(file);
+      });
+    }
+
+    async function extractPdfText(file) {
+      if (!window.pdfjsLib) {
+        await loadPdfJs();
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      var fullText = '';
+      for (var i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        var pageText = content.items.map(function(item) { return item.str; }).join(' ');
+        fullText += pageText + '\\n';
+      }
+      return fullText;
+    }
+
+    function loadPdfJs() {
+      return new Promise(function(resolve, reject) {
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.onload = function() {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          resolve();
+        };
+        script.onerror = function() { reject(new Error('Failed to load PDF library')); };
+        document.head.appendChild(script);
+      });
+    }
+
+    function clearFileUpload(fileInputId, statusId) {
+      const fileInput = document.getElementById(fileInputId);
+      if (fileInput) fileInput.value = '';
+
+      const statusEl = document.getElementById(statusId);
+      if (statusEl) statusEl.classList.remove('visible');
+
+      currentFileContent = '';
+      currentFileName = '';
+
+      // Clear the other step's file status too
+      syncFileStatusUI();
+      saveSessionState();
+    }
+
+    function syncFileStatusUI() {
+      const pairs = [
+        { statusId: 'topicFileStatus', nameId: 'topicFileName' },
+        { statusId: 'topicModeFileStatus', nameId: 'topicModeFileName' }
+      ];
+      pairs.forEach(function(p) {
+        const statusEl = document.getElementById(p.statusId);
+        const nameEl = document.getElementById(p.nameId);
+        if (statusEl && nameEl) {
+          if (currentFileName) {
+            nameEl.textContent = currentFileName;
+            statusEl.classList.add('visible');
+          } else {
+            statusEl.classList.remove('visible');
+          }
+        }
+      });
+    }
 
     // Persistent Session Management
     function initPersistentSession() {
@@ -1115,6 +1363,8 @@ const HTML_CONTENT = `
       const state = {
         className: currentClass,
         topic: currentTopic,
+        fileContent: currentFileContent,
+        fileName: currentFileName,
         mode: currentMode,
         content: currentContent,
         flashcardIndex: currentFlashcardIndex,
@@ -1134,6 +1384,8 @@ const HTML_CONTENT = `
           if (Date.now() - state.timestamp < 24 * 60 * 60 * 1000) {
             currentClass = state.className || '';
             currentTopic = state.topic || '';
+            currentFileContent = state.fileContent || '';
+            currentFileName = state.fileName || '';
             currentMode = state.mode || '';
             currentContent = state.content || null;
             currentFlashcardIndex = state.flashcardIndex || 0;
@@ -1146,6 +1398,10 @@ const HTML_CONTENT = `
             }
             if (currentTopic) {
               document.getElementById('topic').value = currentTopic;
+              updateTopicCharCount('topic', 'topicCharCount');
+            }
+            if (currentFileName) {
+              syncFileStatusUI();
             }
 
             // If we have content, restore to the appropriate view
@@ -1240,6 +1496,33 @@ const HTML_CONTENT = `
       } catch (error) {
         console.error('Error loading library:', error);
         return {};
+      }
+    }
+
+    function getExistingQuestions(className, mode) {
+      try {
+        const library = getStudyLibrary();
+        if (!library[className]) return [];
+
+        const questions = [];
+        library[className].items.forEach(item => {
+          if (item.mode !== mode) return;
+
+          if (mode === 'flashcards' && item.content && item.content.flashcards) {
+            item.content.flashcards.forEach(fc => {
+              questions.push(fc.question);
+            });
+          } else if ((mode === 'quiz' || mode === 'test') && item.content && item.content.questions) {
+            item.content.questions.forEach(q => {
+              questions.push(q.question);
+            });
+          }
+        });
+
+        return questions;
+      } catch (error) {
+        console.error('Error getting existing questions:', error);
+        return [];
       }
     }
 
@@ -1340,7 +1623,7 @@ const HTML_CONTENT = `
               <span class="class-header-text" title="\${className}">\${className}</span>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="font-size: 11px; color: var(--text-tertiary);">\${itemCount}</span>
-                <span class="class-chevron">▶</span>
+                <span class="class-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
               </div>
             </div>
             <div class="content-list">
@@ -1367,10 +1650,10 @@ const HTML_CONTENT = `
                   <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0;">
                     <div class="content-item-date">\${date}</div>
                     <div style="position: relative;">
-                      <button class="menu-btn" onclick="event.stopPropagation(); toggleDropdown('menu-\${item.id}')">⋮</button>
+                      <button class="menu-btn" onclick="event.stopPropagation(); toggleDropdown('menu-\${item.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
                       <div class="dropdown-menu" id="menu-\${item.id}">
                         <div class="dropdown-item danger" onclick="event.stopPropagation(); deleteFromLibrary('\${className.replace(/'/g, "\\'")}', \${item.id})">
-                          🗑️ Delete
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete
                         </div>
                       </div>
                     </div>
@@ -1408,10 +1691,10 @@ const HTML_CONTENT = `
 
     function getModeIcon(mode) {
       switch(mode) {
-        case 'flashcards': return '📚';
-        case 'quiz': return '🎯';
-        case 'test': return '✅';
-        default: return '📄';
+        case 'flashcards': return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>';
+        case 'quiz': return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>';
+        case 'test': return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+        default: return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
       }
     }
 
@@ -1459,6 +1742,8 @@ const HTML_CONTENT = `
       // Clear all current state
       currentClass = '';
       currentTopic = '';
+      currentFileContent = '';
+      currentFileName = '';
       currentMode = '';
       currentContent = null;
       currentQuantity = 10;
@@ -1470,6 +1755,13 @@ const HTML_CONTENT = `
       // Clear input fields
       document.getElementById('className').value = '';
       document.getElementById('topic').value = '';
+
+      // Clear file uploads
+      var topicFileInput = document.getElementById('topicFile');
+      if (topicFileInput) topicFileInput.value = '';
+      var topicModeFileInput = document.getElementById('topicModeFile');
+      if (topicModeFileInput) topicModeFileInput.value = '';
+      syncFileStatusUI();
 
       // Save cleared state
       saveSessionState();
@@ -1495,7 +1787,9 @@ const HTML_CONTENT = `
 
     function updateThemeIcon(theme) {
       const themeToggle = document.getElementById('themeToggle');
-      themeToggle.textContent = theme === 'light' ? '🌙' : '☀️';
+      themeToggle.innerHTML = theme === 'light'
+        ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
     }
 
     // Resize Functionality
@@ -1566,6 +1860,11 @@ const HTML_CONTENT = `
 
         if (topicModeInput) {
           topicModeInput.value = currentTopic || '';
+          updateTopicCharCount('topicMode', 'topicModeCharCount');
+        }
+
+        if (currentFileName) {
+          syncFileStatusUI();
         }
       }
     }
@@ -1691,14 +1990,17 @@ const HTML_CONTENT = `
       showLoading('Generating flashcards...');
 
       try {
+        const existingQuestions = getExistingQuestions(currentClass, 'flashcards');
         const response = await fetch('/api/generate-flashcards', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             className: currentClass,
             topic: currentTopic,
+            fileContext: currentFileContent,
             sessionId,
-            count: currentQuantity
+            count: currentQuantity,
+            existingQuestions
           })
         });
 
@@ -1769,14 +2071,17 @@ const HTML_CONTENT = `
       showLoading('Generating quiz...');
 
       try {
+        const existingQuestions = getExistingQuestions(currentClass, 'quiz');
         const response = await fetch('/api/generate-quiz', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             className: currentClass,
             topic: currentTopic,
+            fileContext: currentFileContent,
             sessionId,
-            count: currentQuantity
+            count: currentQuantity,
+            existingQuestions
           })
         });
 
@@ -1823,7 +2128,7 @@ const HTML_CONTENT = `
                 return \`<div class="\${className}" onclick="\${answered ? '' : 'selectQuizAnswer(' + i + ', ' + optIndex + ')'}">\${opt}</div>\`;
               }).join('')}
             </div>
-            <div class="hint-toggle" onclick="toggleHint(\${i})">💡 Show Hint</div>
+            <div class="hint-toggle" onclick="toggleHint(\${i})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5C8.46 12.26 8.93 13.02 9.11 14"/></svg> Show Hint</div>
             <div class="hint-content" id="hint\${i}">\${q.hint}</div>
             \${answered ? '<div class="explanation"><strong>Explanation:</strong> ' + q.explanation + '</div>' : ''}
           </div>
@@ -1848,14 +2153,17 @@ const HTML_CONTENT = `
       showLoading('Generating test...');
 
       try {
+        const existingQuestions = getExistingQuestions(currentClass, 'test');
         const response = await fetch('/api/generate-test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             className: currentClass,
             topic: currentTopic,
+            fileContext: currentFileContent,
             sessionId,
-            count: currentQuantity
+            count: currentQuantity,
+            existingQuestions
           })
         });
 

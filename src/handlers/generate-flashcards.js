@@ -6,24 +6,30 @@ import { AIService } from '../services/ai-service.js';
 import { StorageService } from '../services/storage-service.js';
 import { validateClassName, validateCount } from '../utils/validators.js';
 import { jsonResponse, errorResponse } from '../utils/response-helpers.js';
-import { DEFAULTS } from '../utils/constants.js';
+import { DEFAULTS, FILE_LIMITS } from '../utils/constants.js';
 
 export async function handleGenerateFlashcards(request, env, corsHeaders) {
   try {
     const {
       className,
       topic = '',
+      fileContext = '',
       sessionId = DEFAULTS.SESSION_ID,
-      count = DEFAULTS.FLASHCARD_COUNT
+      count = DEFAULTS.FLASHCARD_COUNT,
+      existingQuestions = []
     } = await request.json();
 
     // Validate input
     validateClassName(className);
     const validatedCount = validateCount(count, 1, 50);
 
+    if (fileContext && fileContext.length > FILE_LIMITS.MAX_CONTEXT_CHARS) {
+      return errorResponse('File content exceeds maximum allowed size', 400, corsHeaders);
+    }
+
     // Generate flashcards using AI service
     const aiService = new AIService(env);
-    const flashcards = await aiService.generateFlashcards(className, topic, validatedCount);
+    const flashcards = await aiService.generateFlashcards(className, topic, validatedCount, existingQuestions, fileContext);
 
     // Store in Durable Object
     const storageService = new StorageService(env);

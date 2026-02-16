@@ -44,13 +44,46 @@ export class AIService {
   }
 
   /**
+   * Extract a short topic name from file content
+   * @param {string} fileContent - The text content of an uploaded file
+   * @returns {Promise<string>} A short topic name (3-8 words)
+   */
+  async extractTopicFromFile(fileContent) {
+    const sample = fileContent.slice(0, 2000);
+    const messages = [
+      {
+        role: 'system',
+        content: 'You are a helpful assistant. Given the beginning of a text document, respond with ONLY a short topic name (3-8 words) that describes what the document is about. No punctuation, no explanation.',
+      },
+      {
+        role: 'user',
+        content: `What is this document about?\n\n${sample}`,
+      },
+    ];
+
+    const response = await this.ai.run(AI_MODEL, {
+      messages,
+      max_tokens: TOKEN_LIMITS.EXTRACT_TOPIC,
+      temperature: TEMPERATURE.LOW,
+    });
+
+    return response.response.trim();
+  }
+
+  /**
    * Generate flashcards for studying
    * @param {string} className - Class name
    * @param {string} topic - Specific topic (optional)
    * @param {number} count - Number of flashcards to generate
+   * @param {Array} existingQuestions - Questions to avoid duplicating
+   * @param {string} fileContext - Optional file content to use as source material
    * @returns {Promise<Object>} { flashcards: Array }
    */
-  async generateFlashcards(className, topic = '', count = 10) {
+  async generateFlashcards(className, topic = '', count = 10, existingQuestions = [], fileContext = '') {
+    const exclusionNote = existingQuestions.length > 0
+      ? `\n\nIMPORTANT: The following questions already exist in the user's study library. You MUST NOT repeat or closely rephrase any of them. Generate completely different questions:\n${existingQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
+      : '';
+
     const messages = [
       {
         role: 'system',
@@ -58,7 +91,7 @@ export class AIService {
       },
       {
         role: 'user',
-        content: `Create ${count} flashcards for ${className}${topic ? ` focusing on ${topic}` : ''}. Each flashcard should have a clear question and a concise answer. Return ONLY the JSON format specified.`,
+        content: `Create ${count} flashcards for ${className}${topic ? ` focusing on ${topic}` : ''}. Each flashcard should have a clear question and a concise answer. Return ONLY the JSON format specified.${fileContext ? `\n\nUse the following provided document as your primary source material:\n\n${fileContext}` : ''}${exclusionNote}`,
       },
     ];
 
@@ -83,7 +116,11 @@ export class AIService {
    * @param {number} count - Number of questions to generate
    * @returns {Promise<Object>} { questions: Array }
    */
-  async generateQuiz(className, topic = '', count = 5) {
+  async generateQuiz(className, topic = '', count = 5, existingQuestions = [], fileContext = '') {
+    const exclusionNote = existingQuestions.length > 0
+      ? `\n\nIMPORTANT: The following questions already exist in the user's study library. You MUST NOT repeat or closely rephrase any of them. Generate completely different questions:\n${existingQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
+      : '';
+
     const messages = [
       {
         role: 'system',
@@ -91,7 +128,7 @@ export class AIService {
       },
       {
         role: 'user',
-        content: `Create ${count} multiple choice questions for ${className}${topic ? ` focusing on ${topic}` : ''}. Each question should have 4 options (A-D), indicate which is correct, include a helpful hint, and provide an explanation. Return ONLY the JSON format specified.`,
+        content: `Create ${count} multiple choice questions for ${className}${topic ? ` focusing on ${topic}` : ''}. Each question should have 4 options (A-D), indicate which is correct, include a helpful hint, and provide an explanation. Return ONLY the JSON format specified.${fileContext ? `\n\nUse the following provided document as your primary source material:\n\n${fileContext}` : ''}${exclusionNote}`,
       },
     ];
 
@@ -116,7 +153,11 @@ export class AIService {
    * @param {number} count - Number of questions to generate
    * @returns {Promise<Object>} { questions: Array }
    */
-  async generateTest(className, topic = '', count = 10) {
+  async generateTest(className, topic = '', count = 10, existingQuestions = [], fileContext = '') {
+    const exclusionNote = existingQuestions.length > 0
+      ? `\n\nIMPORTANT: The following questions already exist in the user's study library. You MUST NOT repeat or closely rephrase any of them. Generate completely different questions:\n${existingQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
+      : '';
+
     const messages = [
       {
         role: 'system',
@@ -124,7 +165,7 @@ export class AIService {
       },
       {
         role: 'user',
-        content: `Create ${count} test questions for ${className}${topic ? ` focusing on ${topic}` : ''}. Include a mix of multiple choice and short answer questions. Each question should have a point value and correct answer. Return ONLY the JSON format specified.`,
+        content: `Create ${count} test questions for ${className}${topic ? ` focusing on ${topic}` : ''}. Include a mix of multiple choice and short answer questions. Each question should have a point value and correct answer. Return ONLY the JSON format specified.${fileContext ? `\n\nUse the following provided document as your primary source material:\n\n${fileContext}` : ''}${exclusionNote}`,
       },
     ];
 
